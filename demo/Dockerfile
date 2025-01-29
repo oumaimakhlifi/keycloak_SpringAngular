@@ -24,7 +24,7 @@ WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
 # Copier la configuration (application.yml)
-COPY src/main/resources/application.yml /app/application.yml
+COPY src/main/resources/application.properties /app/application.properties
 
 # Exposer le port 9090
 EXPOSE 9090
