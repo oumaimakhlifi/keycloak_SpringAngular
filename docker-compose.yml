@@ -1,0 +1,93 @@
+version: '3.7'
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.0
+    environment:
+      - DB_VENDOR=postgres
+      - DB_ADDR=keycloak-db
+      - DB_DATABASE=keycloak
+      - DB_USER=keycloak
+      - DB_PASSWORD=password
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - PROXY_ADDRESS_FORWARDING=true
+      - JAVA_OPTS_APPEND=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    ports:
+      - "8080:8080"  # Port Keycloak (HTTP)
+      - "5005:5005"  # Port pour le débogage
+    volumes:
+      - ./keycloak-providers:/opt/keycloak/providers  # Répertoire pour les extensions
+      - keycloak_data:/opt/keycloak/data             # Persistance des données Keycloak
+    entrypoint: ["/opt/keycloak/bin/kc.sh", "start-dev"]
+    depends_on:
+      - keycloak-db
+    networks:
+      my-network:
+        ipv4_address: 192.168.1.2
+
+  keycloak-db:
+    image: postgres:17
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data  # Persistance des données PostgreSQL
+    networks:
+      my-network:
+        ipv4_address: 192.168.1.3
+
+  customer-db-service:
+    container_name: "customer-db-service"
+    image: mysql:8.0
+    environment:
+      - MYSQL_DATABASE=customer
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=Auto@123
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_ROOT_HOST=%  
+    ports:
+      - "3306:3306"  # Port MySQL
+    volumes:
+      - mysql_data:/var/lib/mysql                  # Persistance des données MySQL
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Script d'initialisation
+    networks:
+      my-network:
+        ipv4_address: 192.168.1.4
+
+  angular-app:
+    build:
+      context: ./client  # Chemin vers le dossier Angular contenant le Dockerfile
+    ports:
+      - "4200:4200"  # Port Angular exposé
+    networks:
+      my-network:
+        ipv4_address: 192.168.1.5
+
+  spring-boot-app:
+    build:
+      context: ./demo  # Chemin vers le dossier Spring Boot contenant le Dockerfile
+    environment:
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://192.168.1.2:8080/realms/Customer
+      - application.client=customer  # Ajout de la variable d'environnement
+    ports:
+      - "9090:9090"  # Port Spring Boot exposé
+    depends_on:
+      - keycloak
+    networks:
+      my-network:
+        ipv4_address: 192.168.1.6
+
+volumes:
+  keycloak_db_data: {}
+  mysql_data: {}
+  keycloak_data: {}
+
+networks:
+  my-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+
